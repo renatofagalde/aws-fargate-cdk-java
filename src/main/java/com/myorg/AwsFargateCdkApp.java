@@ -1,40 +1,35 @@
 package com.myorg;
 
 import software.amazon.awscdk.App;
-import software.amazon.awscdk.Environment;
-import software.amazon.awscdk.StackProps;
-
-import java.util.Arrays;
 
 public class AwsFargateCdkApp {
     public static void main(final String[] args) {
         App app = new App();
 
-        new AwsFargateCdkStack(app, "AwsFargateCdkStack", StackProps.builder()
-                // If you don't specify 'env', this stack will be environment-agnostic.
-                // Account/Region-dependent features and context lookups will not work,
-                // but a single synthesized template can be deployed anywhere.
+        final VPCStack vpcStack = new VPCStack(app, "VPC");
+        final ClusterStack clusterStack = new ClusterStack(app, "CLUSTER", vpcStack.getVPC());
+        clusterStack.addDependency(vpcStack);
 
-                // Uncomment the next block to specialize this stack for the AWS Account
-                // and Region that are implied by the current CLI configuration.
-                /*
-                .env(Environment.builder()
-                        .account(System.getenv("CDK_DEFAULT_ACCOUNT"))
-                        .region(System.getenv("CDK_DEFAULT_REGION"))
-                        .build())
-                */
+        final RDSStack rdsStack = new RDSStack(app, "RDS", vpcStack.getVPC());
+        rdsStack.addDependency(vpcStack);
 
-                // Uncomment the next block if you know exactly what Account and Region you
-                // want to deploy the stack to.
-                /*
-                .env(Environment.builder()
-                        .account("123456789012")
-                        .region("us-east-1")
-                        .build())
-                */
+        final SNSStack snsStack = new SNSStack(app, "SNS01");
+        final FileStack file01 = new FileStack(app, "FILE01");
 
-                // For more information, see https://docs.aws.amazon.com/cdk/latest/guide/environments.html
-                .build());
+        final Service01Stack service01Stack = new Service01Stack(app, "SERVICE01", clusterStack.getCluster(),
+                snsStack.getProductEventsTopic(),file01.getBucket(),file01.getFileQueue());
+        service01Stack.addDependency(clusterStack);
+        service01Stack.addDependency(rdsStack);
+        service01Stack.addDependency(snsStack);
+        service01Stack.addDependency(file01);
+
+        DynamoDBStack dynamoDBStack = new DynamoDBStack(app, "DYNAMO01");
+
+        final Service02Stack service02Stack = new Service02Stack(app, "SERVICE02",
+                clusterStack.getCluster(), snsStack.getProductEventsTopic(),dynamoDBStack.getProductEventTable());
+        service02Stack.addDependency(clusterStack);
+        service02Stack.addDependency(snsStack);
+        service02Stack.addDependency(dynamoDBStack);
 
         app.synth();
     }
